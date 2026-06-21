@@ -36,6 +36,7 @@ export interface TrackPoint {
   temperature: number;
   timestamp: string;
   phase: TransportPhase;
+  doorStatus: DoorStatus;
 }
 
 export interface Anomaly {
@@ -71,6 +72,7 @@ export interface FilterState {
   carrier: string;
   cargoType: string;
   tempStatus: TempStatus | "all";
+  vehicleStatus: VehicleStatus | "all";
   search: string;
 }
 

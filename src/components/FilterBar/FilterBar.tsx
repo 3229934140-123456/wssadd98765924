@@ -1,16 +1,22 @@
-import { Search, Filter, X } from "lucide-react";
+import { Search, Filter, X, Truck, PauseCircle } from "lucide-react";
 import { carriers, routes, cargoTypes } from "@/mock/vehicles";
 import { useVehicleStore } from "@/store/vehicleStore";
-import type { TempStatus } from "@/types";
+import type { TempStatus, VehicleStatus } from "@/types";
 
 export default function FilterBar() {
   const { filters, setFilters } = useVehicleStore();
 
   const tempStatusOptions: Array<{ value: TempStatus | "all"; label: string; color: string }> = [
-    { value: "all", label: "全部状态", color: "text-slate-400" },
+    { value: "all", label: "全部温度", color: "text-slate-400" },
     { value: "normal", label: "正常", color: "text-emerald-400" },
     { value: "warning", label: "预警", color: "text-amber-400" },
     { value: "alert", label: "异常", color: "text-red-400" },
+  ];
+
+  const vehicleStatusOptions: Array<{ value: VehicleStatus | "all"; label: string; icon: any }> = [
+    { value: "in_transit", label: "在途", icon: Truck },
+    { value: "parked", label: "停靠", icon: PauseCircle },
+    { value: "all", label: "全部", icon: Filter },
   ];
 
   const hasActiveFilter =
@@ -18,6 +24,7 @@ export default function FilterBar() {
     filters.carrier !== "全部" ||
     filters.cargoType !== "全部" ||
     filters.tempStatus !== "all" ||
+    filters.vehicleStatus !== "in_transit" ||
     filters.search !== "";
 
   const resetFilters = () => {
@@ -26,6 +33,7 @@ export default function FilterBar() {
       carrier: "全部",
       cargoType: "全部",
       tempStatus: "all",
+      vehicleStatus: "in_transit",
       search: "",
     });
   };
@@ -85,6 +93,26 @@ export default function FilterBar() {
               </option>
             ))}
           </select>
+
+          <div className="flex items-center gap-1 bg-slate-800/50 border border-slate-700 rounded-lg p-0.5">
+            {vehicleStatusOptions.map((opt) => {
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setFilters({ vehicleStatus: opt.value })}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                    filters.vehicleStatus === opt.value
+                      ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5" />
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
 
           <div className="flex items-center gap-1 bg-slate-800/50 border border-slate-700 rounded-lg p-0.5">
             {tempStatusOptions.map((opt) => (

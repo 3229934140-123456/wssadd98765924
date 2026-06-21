@@ -22,6 +22,7 @@ export const useVehicleStore = create<VehicleStore>((set, get) => ({
     carrier: "全部",
     cargoType: "全部",
     tempStatus: "all",
+    vehicleStatus: "in_transit",
     search: "",
   },
 
@@ -42,6 +43,7 @@ export const useVehicleStore = create<VehicleStore>((set, get) => ({
   getFilteredVehicles: () => {
     const { vehicles, filters } = get();
     return vehicles.filter((v) => {
+      if (filters.vehicleStatus !== "all" && v.status !== filters.vehicleStatus) return false;
       if (filters.route !== "全部线路" && v.route !== filters.route) return false;
       if (filters.carrier !== "全部" && v.carrier !== filters.carrier) return false;
       if (filters.cargoType !== "全部" && v.cargoType !== filters.cargoType) return false;
@@ -57,13 +59,12 @@ export const useVehicleStore = create<VehicleStore>((set, get) => ({
   },
 
   getStats: () => {
-    const { vehicles } = get();
-    const inTransit = vehicles.filter((v) => v.status === "in_transit");
+    const filtered = get().getFilteredVehicles();
     return {
-      total: inTransit.length,
-      normal: inTransit.filter((v) => v.tempStatus === "normal").length,
-      warning: inTransit.filter((v) => v.tempStatus === "warning").length,
-      alert: inTransit.filter((v) => v.tempStatus === "alert").length,
+      total: filtered.length,
+      normal: filtered.filter((v) => v.tempStatus === "normal").length,
+      warning: filtered.filter((v) => v.tempStatus === "warning").length,
+      alert: filtered.filter((v) => v.tempStatus === "alert").length,
     };
   },
 }));

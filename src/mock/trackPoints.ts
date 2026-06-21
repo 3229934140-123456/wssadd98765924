@@ -1,4 +1,4 @@
-import type { TrackPoint } from "@/types";
+import type { TrackPoint, DoorStatus } from "@/types";
 
 function generateTrackPoints(
   vehicleId: string,
@@ -40,6 +40,17 @@ function generateTrackPoints(
         lat += (Math.random() - 0.5) * 0.02;
       }
 
+      let doorStatus: DoorStatus = "closed";
+      if (phase === "loading" || phase === "unloading") {
+        doorStatus = i < numPoints * 0.7 ? "open" : "closed";
+      }
+      if (phase === "waiting" && Math.random() > 0.7) {
+        doorStatus = "open";
+      }
+      if (hasAnomaly && phase === "transporting" && i >= 10 && i <= 22) {
+        doorStatus = "open";
+      }
+
       points.push({
         id: `${vehicleId}-${pointIndex}`,
         vehicleId,
@@ -48,6 +59,7 @@ function generateTrackPoints(
         temperature: Number(temp.toFixed(1)),
         timestamp: time.toISOString().replace("T", " ").slice(0, 19),
         phase,
+        doorStatus,
       });
 
       time.setMinutes(time.getMinutes() + 8 + Math.floor(Math.random() * 5));

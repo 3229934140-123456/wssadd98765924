@@ -1,10 +1,18 @@
+import { useEffect } from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import Layout from "@/components/Layout/Layout";
 import VehicleList from "@/pages/VehicleList/VehicleList";
 import VehicleDetail from "@/pages/VehicleDetail/VehicleDetail";
 import AnomalyList from "@/pages/AnomalyList/AnomalyList";
+import { useAnomalyStore } from "@/store/anomalyStore";
 
 export default function App() {
+  const initFromStorage = useAnomalyStore((s) => s.initFromStorage);
+
+  useEffect(() => {
+    initFromStorage();
+  }, [initFromStorage]);
+
   return (
     <Router>
       <Routes>

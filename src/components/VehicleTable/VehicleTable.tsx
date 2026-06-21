@@ -8,7 +8,14 @@ import type { Vehicle } from "@/types";
 export default function VehicleTable() {
   const navigate = useNavigate();
   const getFilteredVehicles = useVehicleStore((s) => s.getFilteredVehicles);
+  const filters = useVehicleStore((s) => s.filters);
   const vehicles = getFilteredVehicles();
+
+  const getStatusLabel = () => {
+    if (filters.vehicleStatus === "in_transit") return "在途车辆";
+    if (filters.vehicleStatus === "parked") return "停靠车辆";
+    return "车辆";
+  };
 
   const handleRowClick = (id: string) => {
     navigate(`/vehicles/${id}`);
@@ -49,7 +56,7 @@ export default function VehicleTable() {
         </table>
       </div>
       <div className="px-5 py-3 border-t border-slate-800 bg-slate-800/20 flex items-center justify-between text-xs text-slate-500">
-        <span>共 {vehicles.length} 辆在途车辆</span>
+        <span>共 {vehicles.length} 辆{getStatusLabel()}</span>
         <span>数据每 30 秒自动刷新</span>
       </div>
     </div>
