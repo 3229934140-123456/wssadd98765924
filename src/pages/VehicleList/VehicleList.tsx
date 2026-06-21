@@ -1,13 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { Truck, CheckCircle, AlertTriangle, AlertCircle } from "lucide-react";
 import StatCard from "@/components/StatCard/StatCard";
 import FilterBar from "@/components/FilterBar/FilterBar";
 import VehicleTable from "@/components/VehicleTable/VehicleTable";
+import { WatchlistPanel } from "@/components/WatchlistPanel/WatchlistPanel";
 import { useVehicleStore } from "@/store/vehicleStore";
 
 export default function VehicleList() {
+  const vehicles = useVehicleStore((s) => s.vehicles);
+  const filters = useVehicleStore((s) => s.filters);
   const getStats = useVehicleStore((s) => s.getStats);
-  const stats = getStats();
+
+  const stats = useMemo(() => {
+    return getStats();
+  }, [vehicles, filters, getStats]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -16,8 +22,10 @@ export default function VehicleList() {
   }, []);
 
   return (
-    <div className="animate-fade-in">
-      <div className="grid grid-cols-4 gap-4 mb-5">
+    <div className="animate-fade-in space-y-6">
+      <WatchlistPanel />
+
+      <div className="grid grid-cols-4 gap-4">
         <StatCard
           title="在途车辆"
           value={stats.total}

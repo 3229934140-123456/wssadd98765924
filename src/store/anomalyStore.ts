@@ -1,6 +1,8 @@
 import { create } from "zustand";
-import type { Anomaly, HandoverRecord, HandleAction, AnomalyStatus } from "@/types";
+import type { Anomaly, HandoverRecord, HandleAction, AnomalyStatus, ClosureStep, DailyReport } from "@/types";
+import { CLOSURE_FLOW, CLOSURE_STEP_LABELS } from "@/types";
 import { mockAnomalies, mockHandoverRecords } from "@/mock/anomalies";
+import { mockVehicles } from "@/mock/vehicles";
 import { generateId } from "@/utils";
 
 const STORAGE_KEYS = {
@@ -33,6 +35,8 @@ interface AnomalyStore {
     recordsCount: number;
     suggestion: string;
   }>;
+  getClosureFlow: (anomalyId: string) => ClosureStep[];
+  getDailyReport: (date?: string) => DailyReport;
 }
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
@@ -193,5 +197,95 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
         if (priorityDiff !== 0) return priorityDiff;
         return new Date(b.anomaly.startTime).getTime() - new Date(a.anomaly.startTime).getTime();
       });
+  },
+
+  getClosureFlow: (anomalyId) => {
+    const { anomalies, handoverRecords } = get();
+    const anomaly = anomalies.find((a) => a.id === anomalyId);
+    if (!anomaly) return [];
+
+    const records = handoverRecords
+      .filter((r) => r.anomalyId === anomalyId)
+      .sort((a, b) => new Date(a.handleTime).getTime() - new Date(b.handleTime).getTime());
+
+    const steps: ClosureStep[] = [];
+
+    for (const step of CLOSURE_FLOW) {
+      if (step === "detected") {
+        steps.push({
+          step,
+          label: CLOSURE_STEP_LABELS[step],
+          time: anomaly.startTime,
+          handler: "系统",
+          remark: `温度${anomaly.type === "over_high" ? "超高" : "超低"}，${anomaly.compartment}`,
+          completed: true,
+        });
+      } else if (step === "resolved") {
+        const resolveRecord = records.find((r) => r.action === "mark_resolved");
+        steps.push({
+          step,
+          label: CLOSURE_STEP_LABELS[step],
+          time: resolveRecord?.handleTime || anomaly.endTime || null,
+          handler: resolveRecord?.handler || null,
+          remark: resolveRecord?.remark || null,
+          completed: anomaly.status === "resolved",
+        });
+      } else {
+        const stepRecord = records.find((r) => r.action === step);
+        const isCompleted = !!stepRecord;
+        steps.push({
+          step,
+          label: CLOSURE_STEP_LABELS[step],
+          time: stepRecord?.handleTime || null,
+          handler: stepRecord?.handler || null,
+          remark: stepRecord?.remark || null,
+          completed: isCompleted,
+        });
+      }
+    }
+
+    return steps;
+  },
+
+  getDailyReport: (dateStr) => {
+    const { anomalies, handoverRecords } = get();
+    const today = new Date();
+    const targetDate = dateStr || today.toISOString().split("T")[0];
+
+    const isToday = (timeStr: string) => {
+      return timeStr.split(" ")[0] === targetDate || timeStr.split("T")[0] === targetDate;
+    };
+
+    const inTransitCount = mockVehicles.filter((v) => v.status === "in_transit").length;
+    const totalAnomalies = anomalies.length;
+    const unresolvedCount = anomalies.filter((a) => a.status !== "resolved").length;
+
+    const todayRecords = handoverRecords.filter((r) => isToday(r.handleTime));
+    const resolvedToday = todayRecords.filter((r) => r.action === "mark_resolved").length;
+    const processingToday = todayRecords.length;
+
+    const anomalySummary = anomalies.map((anomaly) => {
+      const records = handoverRecords.filter((r) => r.anomalyId === anomaly.id);
+      const sortedRecords = [...records].sort(
+        (a, b) => new Date(b.handleTime).getTime() - new Date(a.handleTime).getTime()
+      );
+      const handlers = [...new Set(records.map((r) => r.handler))];
+      return {
+        anomaly,
+        latestRecord: sortedRecords[0] || null,
+        handlers,
+      };
+    });
+
+    return {
+      date: targetDate,
+      totalVehiclesInTransit: inTransitCount,
+      totalAnomalies,
+      unresolvedAnomalies: unresolvedCount,
+      resolvedToday,
+      processingToday,
+      handoverRecords: todayRecords,
+      anomalySummary,
+    };
   },
 }));

@@ -16,6 +16,9 @@ export default function Layout() {
     if (location.pathname === "/anomalies") {
       return { title: "异常处置", subtitle: "温度异常事件处理与交接" };
     }
+    if (location.pathname === "/daily-report") {
+      return { title: "值班日报", subtitle: "当日异常处理汇总与交接" };
+    }
     return { title: "冷链监控", subtitle: "" };
   };
 

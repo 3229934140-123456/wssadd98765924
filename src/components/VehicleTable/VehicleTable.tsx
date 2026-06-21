@@ -1,5 +1,6 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronRight, Thermometer, Clock, DoorOpen, DoorClosed, Truck } from "lucide-react";
+import { ChevronRight, Thermometer, Clock, DoorOpen, DoorClosed, Truck, Star } from "lucide-react";
 import { TempStatusBadge, DoorStatusBadge } from "@/components/StatusBadge/StatusBadge";
 import { useVehicleStore } from "@/store/vehicleStore";
 import { getTempColor, relativeTime } from "@/utils";
@@ -7,9 +8,13 @@ import type { Vehicle } from "@/types";
 
 export default function VehicleTable() {
   const navigate = useNavigate();
-  const getFilteredVehicles = useVehicleStore((s) => s.getFilteredVehicles);
+  const vehicles = useVehicleStore((s) => s.vehicles);
   const filters = useVehicleStore((s) => s.filters);
-  const vehicles = getFilteredVehicles();
+  const getFilteredVehicles = useVehicleStore((s) => s.getFilteredVehicles);
+
+  const filteredVehicles = useMemo(() => {
+    return getFilteredVehicles();
+  }, [vehicles, filters, getFilteredVehicles]);
 
   const getStatusLabel = () => {
     if (filters.vehicleStatus === "in_transit") return "在途车辆";
@@ -27,6 +32,7 @@ export default function VehicleTable() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-800/30">
+              <th className="text-center text-xs font-medium text-slate-400 px-3 py-3 w-12">关注</th>
               <th className="text-left text-xs font-medium text-slate-400 px-5 py-3 w-16">状态</th>
               <th className="text-left text-xs font-medium text-slate-400 px-4 py-3">车牌号</th>
               <th className="text-left text-xs font-medium text-slate-400 px-4 py-3">当前温度</th>
@@ -41,12 +47,12 @@ export default function VehicleTable() {
             </tr>
           </thead>
           <tbody>
-            {vehicles.map((vehicle) => (
+            {filteredVehicles.map((vehicle) => (
               <VehicleRow key={vehicle.id} vehicle={vehicle} onClick={() => handleRowClick(vehicle.id)} />
             ))}
-            {vehicles.length === 0 && (
+            {filteredVehicles.length === 0 && (
               <tr>
-                <td colSpan={11} className="text-center py-12 text-slate-500">
+                <td colSpan={12} className="text-center py-12 text-slate-500">
                   <Truck className="w-12 h-12 mx-auto mb-3 opacity-30" />
                   <p>暂无符合条件的车辆</p>
                 </td>
@@ -56,7 +62,7 @@ export default function VehicleTable() {
         </table>
       </div>
       <div className="px-5 py-3 border-t border-slate-800 bg-slate-800/20 flex items-center justify-between text-xs text-slate-500">
-        <span>共 {vehicles.length} 辆{getStatusLabel()}</span>
+        <span>共 {filteredVehicles.length} 辆{getStatusLabel()}</span>
         <span>数据每 30 秒自动刷新</span>
       </div>
     </div>
@@ -65,12 +71,32 @@ export default function VehicleTable() {
 
 function VehicleRow({ vehicle, onClick }: { vehicle: Vehicle; onClick: () => void }) {
   const tempColor = getTempColor(vehicle.currentTemp, vehicle.tempMin, vehicle.tempMax);
+  const toggleWatchlist = useVehicleStore((s) => s.toggleWatchlist);
+  const isWatched = useVehicleStore((s) => s.isWatched(vehicle.id));
+
+  const handleStarClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    toggleWatchlist(vehicle.id);
+  };
 
   return (
     <tr
       onClick={onClick}
       className="border-b border-slate-800/50 hover:bg-slate-800/40 cursor-pointer transition-colors group"
     >
+      <td className="px-3 py-4 text-center">
+        <button
+          onClick={handleStarClick}
+          className={`p-1.5 rounded-lg transition-colors ${
+            isWatched
+              ? "text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+              : "text-slate-600 hover:text-amber-400 hover:bg-slate-700/50"
+          }`}
+          title={isWatched ? "取消关注" : "加入盯车"}
+        >
+          <Star size={16} fill={isWatched ? "currentColor" : "none"} />
+        </button>
+      </td>
       <td className="px-5 py-4">
         <div className="relative">
           <TempStatusBadge status={vehicle.tempStatus} />

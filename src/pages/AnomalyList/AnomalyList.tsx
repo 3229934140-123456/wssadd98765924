@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { AlertTriangle, Clock, CheckCircle2, Filter, LayoutGrid, ArrowRightLeft } from "lucide-react";
 import AnomalyCard from "@/components/AnomalyCard/AnomalyCard";
 import AnomalyDetailPanel from "@/components/AnomalyDetailPanel/AnomalyDetailPanel";
@@ -12,10 +12,20 @@ type ViewMode = "list" | "handover";
 export default function AnomalyList() {
   const [selectedAnomalyId, setSelectedAnomalyId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("list");
-  const { statusFilter, setStatusFilter, getFilteredAnomalies, getAnomalyById } = useAnomalyStore();
+  const anomalies = useAnomalyStore((s) => s.anomalies);
+  const handoverRecords = useAnomalyStore((s) => s.handoverRecords);
+  const statusFilter = useAnomalyStore((s) => s.statusFilter);
+  const setStatusFilter = useAnomalyStore((s) => s.setStatusFilter);
+  const getFilteredAnomalies = useAnomalyStore((s) => s.getFilteredAnomalies);
+  const getAnomalyById = useAnomalyStore((s) => s.getAnomalyById);
 
-  const anomalies = getFilteredAnomalies();
-  const selectedAnomaly = selectedAnomalyId ? getAnomalyById(selectedAnomalyId) : null;
+  const filteredAnomalies = useMemo(() => {
+    return getFilteredAnomalies();
+  }, [anomalies, statusFilter, handoverRecords, getFilteredAnomalies]);
+
+  const selectedAnomaly = useMemo(() => {
+    return selectedAnomalyId ? getAnomalyById(selectedAnomalyId) : null;
+  }, [selectedAnomalyId, anomalies, getAnomalyById]);
 
   useEffect(() => {
     const handleSelectAnomaly = (e: Event) => {
@@ -36,10 +46,10 @@ export default function AnomalyList() {
   ];
 
   const stats = {
-    pending: anomalies.filter((a) => a.status === "pending").length,
-    processing: anomalies.filter((a) => a.status === "processing").length,
-    reviewing: anomalies.filter((a) => a.status === "reviewing").length,
-    resolved: anomalies.filter((a) => a.status === "resolved").length,
+    pending: filteredAnomalies.filter((a) => a.status === "pending").length,
+    processing: filteredAnomalies.filter((a) => a.status === "processing").length,
+    reviewing: filteredAnomalies.filter((a) => a.status === "reviewing").length,
+    resolved: filteredAnomalies.filter((a) => a.status === "resolved").length,
   };
 
   const viewTabs = [
@@ -80,7 +90,7 @@ export default function AnomalyList() {
                   const isActive = statusFilter === tab.value;
                   const count =
                     tab.value === "all"
-                      ? anomalies.length
+                      ? filteredAnomalies.length
                       : stats[tab.value as keyof typeof stats];
                   return (
                     <button
@@ -107,7 +117,7 @@ export default function AnomalyList() {
             </div>
             <div className="text-sm text-slate-500">
               {viewMode === "list"
-                ? `共 ${anomalies.length} 条异常记录`
+                ? `共 ${filteredAnomalies.length} 条异常记录`
                 : "按优先级排序的未闭环异常"}
             </div>
           </div>
@@ -115,7 +125,7 @@ export default function AnomalyList() {
 
         {viewMode === "list" ? (
           <div className="grid grid-cols-2 gap-4">
-            {anomalies.map((anomaly) => (
+            {filteredAnomalies.map((anomaly) => (
               <AnomalyCard
                 key={anomaly.id}
                 anomaly={anomaly}
@@ -123,7 +133,7 @@ export default function AnomalyList() {
                 onClick={() => setSelectedAnomalyId(anomaly.id)}
               />
             ))}
-            {anomalies.length === 0 && (
+            {filteredAnomalies.length === 0 && (
               <div className="col-span-2 text-center py-16">
                 <CheckCircle2 className="w-16 h-16 text-emerald-500/30 mx-auto mb-4" />
                 <p className="text-slate-400">暂无异常记录</p>

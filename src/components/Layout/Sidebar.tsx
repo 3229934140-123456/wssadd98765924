@@ -1,8 +1,21 @@
-import { NavLink, useLocation } from "react-router-dom";
-import { Truck, MapPin, AlertTriangle, ThermometerSnowflake } from "lucide-react";
+import { useState, useMemo } from "react";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Truck, MapPin, AlertTriangle, ThermometerSnowflake, FileText, LogOut, User, ChevronDown } from "lucide-react";
+import { useUserStore } from "@/store/userStore";
+import { useAnomalyStore } from "@/store/anomalyStore";
 
 export default function Sidebar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { userName, shift, shiftTime, setUser } = useUserStore();
+  const anomalies = useAnomalyStore((s) => s.anomalies);
+  const statusFilter = useAnomalyStore((s) => s.statusFilter);
+  const getFilteredAnomalies = useAnomalyStore((s) => s.getFilteredAnomalies);
+  const [showMenu, setShowMenu] = useState(false);
+
+  const pendingCount = useMemo(() => {
+    return getFilteredAnomalies().filter((a) => a.status === "pending").length;
+  }, [anomalies, statusFilter, getFilteredAnomalies]);
 
   const navItems = [
     {
@@ -14,6 +27,12 @@ export default function Sidebar() {
       path: "/anomalies",
       label: "异常处置",
       icon: AlertTriangle,
+      badge: pendingCount,
+    },
+    {
+      path: "/daily-report",
+      label: "值班日报",
+      icon: FileText,
     },
   ];
 
@@ -22,6 +41,30 @@ export default function Sidebar() {
       return location.pathname.startsWith("/vehicles");
     }
     return location.pathname === path;
+  };
+
+  const handleShiftChange = () => {
+    const shifts = [
+      { shift: "早班", time: "08:00-16:00" },
+      { shift: "中班", time: "16:00-24:00" },
+      { shift: "晚班", time: "00:00-08:00" },
+    ];
+    const currentIdx = shifts.findIndex((s) => s.shift === shift);
+    const nextShift = shifts[(currentIdx + 1) % shifts.length];
+    const newName = prompt("请输入值班员姓名：", userName);
+    if (newName && newName.trim()) {
+      setUser(newName.trim(), nextShift.shift, nextShift.time);
+      navigate("/daily-report");
+    }
+    setShowMenu(false);
+  };
+
+  const handleLogout = () => {
+    const newName = prompt("请输入值班员姓名：", userName);
+    if (newName && newName.trim()) {
+      setUser(newName.trim(), shift, shiftTime);
+    }
+    setShowMenu(false);
   };
 
   return (
@@ -53,9 +96,9 @@ export default function Sidebar() {
             >
               <Icon className="w-5 h-5" />
               <span>{item.label}</span>
-              {item.path === "/anomalies" && (
+              {item.badge && item.badge > 0 && (
                 <span className="ml-auto w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center font-semibold">
-                  3
+                  {item.badge}
                 </span>
               )}
             </NavLink>
@@ -63,16 +106,51 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <div className="p-3 border-t border-slate-800">
-        <div className="flex items-center gap-3 px-3 py-2">
-          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center">
-            <span className="text-sm font-medium text-slate-300">值</span>
+      <div className="p-3 border-t border-slate-800 relative">
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-800/50 transition-colors"
+        >
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center">
+            <span className="text-sm font-medium text-white">
+              {userName.charAt(0)}
+            </span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium text-slate-200 truncate">刘值班</div>
-            <div className="text-xs text-slate-500">早班 · 08:00-16:00</div>
+          <div className="flex-1 min-w-0 text-left">
+            <div className="text-sm font-medium text-slate-200 truncate">
+              {userName}
+            </div>
+            <div className="text-xs text-slate-500">
+              {shift} · {shiftTime}
+            </div>
           </div>
-        </div>
+          <ChevronDown size={14} className="text-slate-500" />
+        </button>
+
+        {showMenu && (
+          <>
+            <div
+              className="fixed inset-0 z-10"
+              onClick={() => setShowMenu(false)}
+            />
+            <div className="absolute bottom-full left-3 right-3 mb-2 bg-slate-800 border border-slate-700 rounded-lg overflow-hidden shadow-xl z-20">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                <User size={16} />
+                更换值班员
+              </button>
+              <button
+                onClick={handleShiftChange}
+                className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+              >
+                <LogOut size={16} />
+                交班换班
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );

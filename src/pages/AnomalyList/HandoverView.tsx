@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Phone,
@@ -18,8 +19,13 @@ import { formatDuration } from "@/utils";
 
 export default function HandoverView() {
   const navigate = useNavigate();
+  const anomalies = useAnomalyStore((s) => s.anomalies);
+  const handoverRecords = useAnomalyStore((s) => s.handoverRecords);
   const getUnclosedSummary = useAnomalyStore((s) => s.getUnclosedSummary);
-  const summary = getUnclosedSummary();
+
+  const summary = useMemo(() => {
+    return getUnclosedSummary();
+  }, [anomalies, handoverRecords, getUnclosedSummary]);
 
   const pendingItems = summary.filter((s) => s.anomaly.status === "pending");
   const processingItems = summary.filter((s) => s.anomaly.status === "processing");

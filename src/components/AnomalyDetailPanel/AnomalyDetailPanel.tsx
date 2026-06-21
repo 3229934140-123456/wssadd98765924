@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Phone,
   User,
@@ -12,12 +12,15 @@ import {
   AlertTriangle,
   ArrowRight,
   X,
+  GitBranch,
 } from "lucide-react";
 import type { Anomaly, HandleAction, HandoverRecord, AnomalyStatus } from "@/types";
 import { HANDLE_ACTION_LABELS, PHASE_LABELS } from "@/types";
 import { AnomalyStatusBadge } from "@/components/StatusBadge/StatusBadge";
+import { ClosureFlowView } from "@/components/ClosureFlowView/ClosureFlowView";
 import { formatDuration } from "@/utils";
 import { useAnomalyStore } from "@/store/anomalyStore";
+import { useUserStore } from "@/store/userStore";
 
 interface AnomalyDetailPanelProps {
   anomaly: Anomaly;
@@ -51,14 +54,21 @@ const actionConfig: Record<HandleAction, { label: string; icon: any; color: stri
   },
 };
 
+type DetailTab = "handover" | "flow";
+
 export default function AnomalyDetailPanel({ anomaly, onClose }: AnomalyDetailPanelProps) {
   const [remark, setRemark] = useState("");
   const [selectedAction, setSelectedAction] = useState<HandleAction | null>(null);
+  const [activeTab, setActiveTab] = useState<DetailTab>("flow");
+  const handoverRecords = useAnomalyStore((s) => s.handoverRecords);
   const getHandoverRecordsByAnomaly = useAnomalyStore((s) => s.getHandoverRecordsByAnomaly);
   const addHandoverRecord = useAnomalyStore((s) => s.addHandoverRecord);
   const updateAnomalyStatus = useAnomalyStore((s) => s.updateAnomalyStatus);
+  const userName = useUserStore((s) => s.userName);
 
-  const records = getHandoverRecordsByAnomaly(anomaly.id);
+  const records = useMemo(() => {
+    return getHandoverRecordsByAnomaly(anomaly.id);
+  }, [anomaly.id, handoverRecords, getHandoverRecordsByAnomaly]);
 
   const handleAction = (action: HandleAction) => {
     setSelectedAction(action);
@@ -67,7 +77,7 @@ export default function AnomalyDetailPanel({ anomaly, onClose }: AnomalyDetailPa
   const handleSubmit = () => {
     if (!selectedAction || !remark.trim()) return;
 
-    addHandoverRecord(anomaly.id, selectedAction, remark, "当前值班员");
+    addHandoverRecord(anomaly.id, selectedAction, remark, userName);
 
     const nextStatus = actionConfig[selectedAction].nextStatus;
     updateAnomalyStatus(anomaly.id, nextStatus);
@@ -142,8 +152,34 @@ export default function AnomalyDetailPanel({ anomaly, onClose }: AnomalyDetailPa
         </div>
 
         <div className="space-y-3">
-          <h4 className="text-sm font-medium text-slate-200">交接记录</h4>
-          {records.length > 0 ? (
+          <div className="flex items-center gap-1 bg-slate-800/50 border border-slate-700 rounded-lg p-0.5">
+            <button
+              onClick={() => setActiveTab("flow")}
+              className={`flex items-center gap-1.5 flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeTab === "flow"
+                  ? "bg-slate-700 text-slate-100"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <GitBranch size={14} />
+              闭环流程
+            </button>
+            <button
+              onClick={() => setActiveTab("handover")}
+              className={`flex items-center gap-1.5 flex-1 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                activeTab === "handover"
+                  ? "bg-slate-700 text-slate-100"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <MessageSquare size={14} />
+              交接记录 ({records.length})
+            </button>
+          </div>
+
+          {activeTab === "flow" ? (
+            <ClosureFlowView anomalyId={anomaly.id} />
+          ) : records.length > 0 ? (
             <div className="relative pl-4">
               <div className="absolute left-1.5 top-2 bottom-2 w-px bg-slate-700" />
               <div className="space-y-4">

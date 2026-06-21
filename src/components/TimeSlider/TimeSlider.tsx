@@ -64,33 +64,43 @@ export default function TimeSlider({ trackPoints, currentIndex, tempMin, tempMax
     let inAnomaly = false;
     let anomalyStart = 0;
     let anomalyType: "over_high" | "over_low" = "over_high";
+    let anomalyStartTime: string = "";
+
+    const calculateDuration = (startTime: string, endTime: string): number => {
+      const start = new Date(startTime).getTime();
+      const end = new Date(endTime).getTime();
+      return Math.max(1, Math.round((end - start) / 60000));
+    };
 
     trackPoints.forEach((point, index) => {
       const status = getTempStatus(point.temperature, tempMin, tempMax);
       if (status === "alert" && !inAnomaly) {
         inAnomaly = true;
         anomalyStart = index;
+        anomalyStartTime = point.timestamp;
         anomalyType = point.temperature > tempMax ? "over_high" : "over_low";
       } else if (status !== "alert" && inAnomaly) {
         inAnomaly = false;
+        const duration = calculateDuration(anomalyStartTime, trackPoints[index - 1].timestamp);
         segments.push({
           startIndex: anomalyStart,
           endIndex: index - 1,
           startPct: (anomalyStart / (totalPoints - 1)) * 100,
           endPct: ((index - 1) / (totalPoints - 1)) * 100,
-          durationMinutes: (index - anomalyStart) * 8,
+          durationMinutes: duration,
           type: anomalyType,
         });
       }
     });
 
     if (inAnomaly) {
+      const duration = calculateDuration(anomalyStartTime, trackPoints[trackPoints.length - 1].timestamp);
       segments.push({
         startIndex: anomalyStart,
         endIndex: trackPoints.length - 1,
         startPct: (anomalyStart / (totalPoints - 1)) * 100,
         endPct: 100,
-        durationMinutes: (trackPoints.length - anomalyStart) * 8,
+        durationMinutes: duration,
         type: anomalyType,
       });
     }
@@ -313,7 +323,10 @@ export default function TimeSlider({ trackPoints, currentIndex, tempMin, tempMax
                   已持续 <span className="text-red-400 font-medium">{formatDuration(currentAnomaly.durationMinutes)}</span>
                 </div>
                 <div className="text-xs text-slate-500 mt-1">
-                  {currentAnomaly.type === "over_high" ? "温度超高" : "温度超低"} · 第 {currentAnomaly.startIndex + 1} - {currentAnomaly.endIndex + 1} 点
+                  {currentAnomaly.type === "over_high" ? "温度超高" : "温度超低"}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5 font-mono">
+                  {trackPoints[currentAnomaly.startIndex]?.timestamp?.slice(11, 16)} - {trackPoints[currentAnomaly.endIndex]?.timestamp?.slice(11, 16) || "至今"}
                 </div>
               </div>
             )}

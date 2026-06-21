@@ -96,3 +96,43 @@ export const HANDLE_ACTION_LABELS: Record<HandleAction, string> = {
   send_review: "转入复核",
   mark_resolved: "已恢复正常",
 };
+
+export interface DailyReport {
+  date: string;
+  totalVehiclesInTransit: number;
+  totalAnomalies: number;
+  unresolvedAnomalies: number;
+  resolvedToday: number;
+  processingToday: number;
+  handoverRecords: HandoverRecord[];
+  anomalySummary: Array<{
+    anomaly: Anomaly;
+    latestRecord: HandoverRecord | null;
+    handlers: string[];
+  }>;
+}
+
+export interface ClosureStep {
+  step: "detected" | "notify_driver" | "contact_customer" | "send_review" | "resolved";
+  label: string;
+  time: string | null;
+  handler: string | null;
+  remark: string | null;
+  completed: boolean;
+}
+
+export const CLOSURE_FLOW: ClosureStep["step"][] = [
+  "detected",
+  "notify_driver",
+  "contact_customer",
+  "send_review",
+  "resolved",
+];
+
+export const CLOSURE_STEP_LABELS: Record<ClosureStep["step"], string> = {
+  detected: "发现异常",
+  notify_driver: "通知司机",
+  contact_customer: "联系客户",
+  send_review: "质量复核",
+  resolved: "闭环归档",
+};
