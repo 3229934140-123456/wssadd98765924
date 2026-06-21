@@ -6,9 +6,11 @@ export type TransportPhase = "loading" | "waiting" | "transporting" | "unloading
 
 export type AnomalyStatus = "pending" | "processing" | "reviewing" | "resolved";
 
-export type HandleAction = "notify_driver" | "contact_customer" | "send_review" | "mark_resolved";
+export type HandleAction = "notify_driver" | "contact_customer" | "send_review" | "mark_resolved" | "takeover";
 
 export type VehicleStatus = "in_transit" | "parked";
+
+export type ShiftType = "morning" | "middle" | "night" | "all";
 
 export interface Vehicle {
   id: string;
@@ -68,6 +70,15 @@ export interface HandoverRecord {
   remark: string;
 }
 
+export interface AnomalyStatusHistory {
+  id: string;
+  anomalyId: string;
+  fromStatus: AnomalyStatus | null;
+  toStatus: AnomalyStatus;
+  changedAt: string;
+  changedBy: string | null;
+}
+
 export interface FilterState {
   route: string;
   carrier: string;
@@ -96,12 +107,20 @@ export const HANDLE_ACTION_LABELS: Record<HandleAction, string> = {
   contact_customer: "已联系客户",
   send_review: "转入复核",
   mark_resolved: "已恢复正常",
+  takeover: "确认接手",
+};
+
+export const SHIFT_LABELS: Record<Exclude<ShiftType, "all">, string> = {
+  morning: "早班",
+  middle: "中班",
+  night: "晚班",
 };
 
 export interface DailyReport {
   date: string;
   totalVehiclesInTransit: number;
   totalAnomalies: number;
+  newAnomaliesToday: number;
   unresolvedAnomalies: number;
   resolvedToday: number;
   processingToday: number;
@@ -111,8 +130,10 @@ export interface DailyReport {
     latestRecord: HandoverRecord | null;
     handlers: string[];
     shiftNote: ShiftNote | null;
+    statusAtEndOfDay: AnomalyStatus;
   }>;
   shiftNotes: ShiftNote[];
+  confirmedTakeovers: ShiftNote[];
 }
 
 export interface ShiftNote {

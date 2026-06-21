@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Anomaly, HandoverRecord, HandleAction, AnomalyStatus, ClosureStep, DailyReport, ShiftNote, TakeoverItem } from "@/types";
+import type { Anomaly, HandoverRecord, HandleAction, AnomalyStatus, ClosureStep, DailyReport, ShiftNote, TakeoverItem, AnomalyStatusHistory } from "@/types";
 import { CLOSURE_FLOW, CLOSURE_STEP_LABELS } from "@/types";
 import { mockAnomalies, mockHandoverRecords } from "@/mock/anomalies";
 import { mockVehicles } from "@/mock/vehicles";
@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   ANOMALY_STATUSES: "coldchain_anomaly_statuses",
   HANDOVER_RECORDS: "coldchain_handover_records",
   SHIFT_NOTES: "coldchain_shift_notes",
+  STATUS_HISTORY: "coldchain_status_history",
 };
 
 interface PersistedAnomalyStatus {
@@ -21,6 +22,7 @@ interface AnomalyStore {
   anomalies: Anomaly[];
   handoverRecords: HandoverRecord[];
   shiftNotes: ShiftNote[];
+  statusHistory: AnomalyStatusHistory[];
   selectedAnomalyId: string | null;
   statusFilter: AnomalyStatus | "all";
   initFromStorage: () => void;
@@ -30,7 +32,7 @@ interface AnomalyStore {
   getAnomalyById: (id: string) => Anomaly | undefined;
   getHandoverRecordsByAnomaly: (anomalyId: string) => HandoverRecord[];
   addHandoverRecord: (anomalyId: string, action: HandleAction, remark: string, handler: string) => void;
-  updateAnomalyStatus: (id: string, status: AnomalyStatus) => void;
+  updateAnomalyStatus: (id: string, status: AnomalyStatus, changedBy?: string) => void;
   getUnclosedSummary: () => Array<{
     anomaly: Anomaly;
     lastRecord: HandoverRecord | null;
@@ -42,6 +44,7 @@ interface AnomalyStore {
   addShiftNote: (anomalyId: string, note: string, author: string, shift: string) => void;
   confirmTakeover: (noteId: string, confirmer: string) => void;
   getTakeoverWorkstation: () => TakeoverItem[];
+  getStatusAtDate: (anomalyId: string, dateStr: string) => AnomalyStatus;
 }
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
@@ -70,6 +73,7 @@ function getActionSuggestion(action: HandleAction): string {
     contact_customer: "请持续监控温度变化，到货前再次确认",
     send_review: "请等待质量部门复核结论，关注后续处理意见",
     mark_resolved: "已闭环，可归档",
+    takeover: "已确认接手，请跟进处理",
   };
   return suggestions[action] || "请持续关注";
 }
@@ -86,6 +90,7 @@ function getStepSuggestion(anomaly: Anomaly, lastAction: HandleAction | null): s
     contact_customer: "客户已告知，下一步建议转入质量复核",
     send_review: "已转复核，等待质量部门结论后闭环归档",
     mark_resolved: "已闭环",
+    takeover: "已确认接手，请继续跟进异常处理",
   };
   return nextStepMap[lastAction] || "请持续关注";
 }
@@ -109,10 +114,25 @@ function calculateTimeoutRisk(anomaly: Anomaly, lastRecordTime: string | null): 
   return { level: "normal", description: "跟进正常" };
 }
 
+function isOnDate(timeStr: string, dateStr: string): boolean {
+  const datePart = timeStr.split(" ")[0] || timeStr.split("T")[0];
+  return datePart === dateStr;
+}
+
+function isDateOnOrBefore(timeStr: string, dateStr: string): boolean {
+  const datePart = timeStr.split(" ")[0] || timeStr.split("T")[0];
+  return datePart <= dateStr;
+}
+
+function getEndOfDay(dateStr: string): string {
+  return `${dateStr} 23:59:59`;
+}
+
 export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
   anomalies: mockAnomalies,
   handoverRecords: mockHandoverRecords,
   shiftNotes: loadFromStorage<ShiftNote[]>(STORAGE_KEYS.SHIFT_NOTES, []),
+  statusHistory: loadFromStorage<AnomalyStatusHistory[]>(STORAGE_KEYS.STATUS_HISTORY, []),
   selectedAnomalyId: null,
   statusFilter: "all",
 
@@ -120,6 +140,7 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
     const persistedStatuses = loadFromStorage<PersistedAnomalyStatus[]>(STORAGE_KEYS.ANOMALY_STATUSES, []);
     const persistedRecords = loadFromStorage<HandoverRecord[]>(STORAGE_KEYS.HANDOVER_RECORDS, []);
     const persistedNotes = loadFromStorage<ShiftNote[]>(STORAGE_KEYS.SHIFT_NOTES, []);
+    const persistedHistory = loadFromStorage<AnomalyStatusHistory[]>(STORAGE_KEYS.STATUS_HISTORY, []);
 
     const updatedAnomalies = mockAnomalies.map((a) => {
       const persisted = persistedStatuses.find((p) => p.anomalyId === a.id);
@@ -141,6 +162,7 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
       anomalies: updatedAnomalies,
       handoverRecords: allRecords,
       shiftNotes: persistedNotes,
+      statusHistory: persistedHistory,
     });
   },
 
@@ -185,16 +207,32 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
     });
   },
 
-  updateAnomalyStatus: (id, status) => {
+  updateAnomalyStatus: (id, status, changedBy = null) => {
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const currentAnomaly = get().anomalies.find((a) => a.id === id);
+    const fromStatus = currentAnomaly?.status || null;
+
     set((state) => {
       const updatedAnomalies = state.anomalies.map((a) => (a.id === id ? { ...a, status } : a));
+
+      const newHistoryEntry: AnomalyStatusHistory = {
+        id: generateId(),
+        anomalyId: id,
+        fromStatus,
+        toStatus: status,
+        changedAt: now,
+        changedBy,
+      };
+
+      const updatedHistory = [...state.statusHistory, newHistoryEntry];
+      saveToStorage(STORAGE_KEYS.STATUS_HISTORY, updatedHistory);
 
       const persistedStatuses = loadFromStorage<PersistedAnomalyStatus[]>(STORAGE_KEYS.ANOMALY_STATUSES, []);
       const existingIndex = persistedStatuses.findIndex((p) => p.anomalyId === id);
       const newStatus: PersistedAnomalyStatus = {
         anomalyId: id,
         status,
-        updatedAt: new Date().toISOString().replace("T", " ").slice(0, 19),
+        updatedAt: now,
       };
 
       if (existingIndex >= 0) {
@@ -206,15 +244,38 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
 
       return {
         anomalies: updatedAnomalies,
+        statusHistory: updatedHistory,
       };
     });
+  },
+
+  getStatusAtDate: (anomalyId, dateStr) => {
+    const { statusHistory, anomalies } = get();
+    const anomaly = anomalies.find((a) => a.id === anomalyId);
+    if (!anomaly) return "pending";
+
+    const endOfDay = getEndOfDay(dateStr);
+    const endOfDayTime = new Date(endOfDay).getTime();
+
+    const historyForAnomaly = statusHistory
+      .filter((h) => h.anomalyId === anomalyId)
+      .filter((h) => new Date(h.changedAt).getTime() <= endOfDayTime)
+      .sort((a, b) => new Date(b.changedAt).getTime() - new Date(a.changedAt).getTime());
+
+    if (historyForAnomaly.length > 0) {
+      return historyForAnomaly[0].toStatus;
+    }
+
+    if (isDateOnOrBefore(anomaly.startTime, dateStr)) {
+      return anomaly.status;
+    }
+
+    return "pending";
   },
 
   addShiftNote: (anomalyId, note, author, shift) => {
     const anomaly = get().anomalies.find((a) => a.id === anomalyId);
     if (!anomaly) return;
-
-    const vehicle = mockVehicles.find((v) => v.id === anomaly.vehicleId);
 
     const newNote: ShiftNote = {
       id: generateId(),
@@ -244,15 +305,22 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
   },
 
   confirmTakeover: (noteId, confirmer) => {
+    const now = new Date().toISOString().replace("T", " ").slice(0, 19);
+    const { shiftNotes } = get();
+    const note = shiftNotes.find((n) => n.id === noteId);
+    if (!note) return;
+
     set((state) => {
       const updatedNotes = state.shiftNotes.map((n) =>
         n.id === noteId
-          ? { ...n, confirmedBy: confirmer, confirmedAt: new Date().toISOString().replace("T", " ").slice(0, 19) }
+          ? { ...n, confirmedBy: confirmer, confirmedAt: now }
           : n
       );
       saveToStorage(STORAGE_KEYS.SHIFT_NOTES, updatedNotes);
       return { shiftNotes: updatedNotes };
     });
+
+    get().addHandoverRecord(note.anomalyId, "takeover", `接班确认：${note.note}`, confirmer);
   },
 
   getTakeoverWorkstation: () => {
@@ -265,11 +333,13 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
           .filter((r) => r.anomalyId === anomaly.id)
           .sort((a, b) => new Date(a.handleTime).getTime() - new Date(b.handleTime).getTime());
 
-        const handlerChain = records.map((r) => ({
-          handler: r.handler,
-          action: r.action,
-          time: r.handleTime,
-        }));
+        const handlerChain = records
+          .filter((r) => r.action !== "takeover")
+          .map((r) => ({
+            handler: r.handler,
+            action: r.action,
+            time: r.handleTime,
+          }));
 
         const lastRecord = records.length > 0 ? records[records.length - 1] : null;
         const lastAction = lastRecord?.action || null;
@@ -383,58 +453,69 @@ export const useAnomalyStore = create<AnomalyStore>((set, get) => ({
   },
 
   getDailyReport: (dateStr) => {
-    const { anomalies, handoverRecords, shiftNotes } = get();
+    const { anomalies, handoverRecords, shiftNotes, getStatusAtDate } = get();
     const today = new Date();
     const targetDate = dateStr || today.toISOString().split("T")[0];
 
-    const isOnDate = (timeStr: string) => {
-      return timeStr.split(" ")[0] === targetDate || timeStr.split("T")[0] === targetDate;
-    };
-
     const inTransitCount = mockVehicles.filter((v) => v.status === "in_transit").length;
 
-    const anomaliesOnDate = anomalies.filter((a) => isOnDate(a.startTime));
+    const newAnomaliesToday = anomalies.filter((a) => isOnDate(a.startTime, targetDate));
+
     const activeAnomaliesOnDate = anomalies.filter((a) => {
-      if (a.status === "resolved") {
-        return isOnDate(a.endTime || a.startTime);
-      }
-      return a.startTime.split(" ")[0] <= targetDate;
+      const statusAtEnd = getStatusAtDate(a.id, targetDate);
+      const startedBeforeOrOn = isDateOnOrBefore(a.startTime, targetDate);
+      return startedBeforeOrOn && statusAtEnd !== "resolved";
     });
 
-    const totalAnomalies = anomaliesOnDate.length;
-    const unresolvedOnDate = activeAnomaliesOnDate.filter((a) => a.status !== "resolved").length;
+    const resolvedOnDate = anomalies.filter((a) => {
+      const statusAtEnd = getStatusAtDate(a.id, targetDate);
+      const prevStatus = getStatusAtDate(a.id, getPreviousDate(targetDate));
+      return prevStatus !== "resolved" && statusAtEnd === "resolved";
+    });
 
-    const todayRecords = handoverRecords.filter((r) => isOnDate(r.handleTime));
-    const resolvedOnDate = todayRecords.filter((r) => r.action === "mark_resolved").length;
-    const processingOnDate = todayRecords.length;
+    const todayRecords = handoverRecords.filter((r) => isOnDate(r.handleTime, targetDate));
+    const processingOnDate = todayRecords.filter((r) => r.action !== "takeover").length;
 
     const anomalySummary = activeAnomaliesOnDate.map((anomaly) => {
-      const records = handoverRecords.filter((r) => r.anomalyId === anomaly.id);
+      const records = handoverRecords
+        .filter((r) => r.anomalyId === anomaly.id)
+        .filter((r) => isDateOnOrBefore(r.handleTime, targetDate));
       const sortedRecords = [...records].sort(
         (a, b) => new Date(b.handleTime).getTime() - new Date(a.handleTime).getTime()
       );
       const handlers = [...new Set(records.map((r) => r.handler))];
-      const note = shiftNotes.find((n) => n.anomalyId === anomaly.id);
+      const note = shiftNotes.find((n) => n.anomalyId === anomaly.id && isOnDate(n.createdAt, targetDate));
+      const statusAtEnd = getStatusAtDate(anomaly.id, targetDate);
       return {
         anomaly,
         latestRecord: sortedRecords[0] || null,
         handlers,
         shiftNote: note || null,
+        statusAtEndOfDay: statusAtEnd,
       };
     });
 
-    const notesOnDate = shiftNotes.filter((n) => isOnDate(n.createdAt));
+    const notesCreatedOnDate = shiftNotes.filter((n) => isOnDate(n.createdAt, targetDate));
+    const confirmedOnDate = shiftNotes.filter((n) => n.confirmedAt && isOnDate(n.confirmedAt, targetDate));
 
     return {
       date: targetDate,
       totalVehiclesInTransit: inTransitCount,
-      totalAnomalies,
-      unresolvedAnomalies: unresolvedOnDate,
-      resolvedToday: resolvedOnDate,
+      totalAnomalies: newAnomaliesToday.length,
+      newAnomaliesToday: newAnomaliesToday.length,
+      unresolvedAnomalies: activeAnomaliesOnDate.length,
+      resolvedToday: resolvedOnDate.length,
       processingToday: processingOnDate,
-      handoverRecords: todayRecords,
+      handoverRecords: todayRecords.filter((r) => r.action !== "takeover"),
       anomalySummary,
-      shiftNotes: notesOnDate,
+      shiftNotes: notesCreatedOnDate,
+      confirmedTakeovers: confirmedOnDate,
     };
   },
 }));
+
+function getPreviousDate(dateStr: string): string {
+  const d = new Date(dateStr);
+  d.setDate(d.getDate() - 1);
+  return d.toISOString().split("T")[0];
+}

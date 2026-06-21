@@ -27,38 +27,39 @@ interface AnomalyDetailPanelProps {
   onClose?: () => void;
 }
 
-const actionConfig: Record<HandleAction, { label: string; icon: any; color: string; nextStatus: AnomalyStatus }> = {
+const actionConfig = {
   notify_driver: {
     label: "已通知司机",
     icon: Phone,
     color: "bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20",
-    nextStatus: "processing",
+    nextStatus: "processing" as AnomalyStatus,
   },
   contact_customer: {
     label: "已联系客户",
     icon: MessageSquare,
     color: "bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20",
-    nextStatus: "processing",
+    nextStatus: "processing" as AnomalyStatus,
   },
   send_review: {
     label: "转入复核",
     icon: AlertTriangle,
     color: "bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20",
-    nextStatus: "reviewing",
+    nextStatus: "reviewing" as AnomalyStatus,
   },
   mark_resolved: {
     label: "已恢复正常",
     icon: CheckCircle2,
     color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
-    nextStatus: "resolved",
+    nextStatus: "resolved" as AnomalyStatus,
   },
 };
 
 type DetailTab = "handover" | "flow";
+type ActionKey = keyof typeof actionConfig;
 
 export default function AnomalyDetailPanel({ anomaly, onClose }: AnomalyDetailPanelProps) {
   const [remark, setRemark] = useState("");
-  const [selectedAction, setSelectedAction] = useState<HandleAction | null>(null);
+  const [selectedAction, setSelectedAction] = useState<ActionKey | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>("flow");
   const handoverRecords = useAnomalyStore((s) => s.handoverRecords);
   const getHandoverRecordsByAnomaly = useAnomalyStore((s) => s.getHandoverRecordsByAnomaly);
@@ -70,7 +71,7 @@ export default function AnomalyDetailPanel({ anomaly, onClose }: AnomalyDetailPa
     return getHandoverRecordsByAnomaly(anomaly.id);
   }, [anomaly.id, handoverRecords, getHandoverRecordsByAnomaly]);
 
-  const handleAction = (action: HandleAction) => {
+  const handleAction = (action: ActionKey) => {
     setSelectedAction(action);
   };
 
@@ -199,7 +200,7 @@ export default function AnomalyDetailPanel({ anomaly, onClose }: AnomalyDetailPa
       <div className="p-5 border-t border-slate-800 space-y-4">
         <div className="text-sm font-medium text-slate-300">处理动作</div>
         <div className="grid grid-cols-2 gap-2">
-          {(Object.keys(actionConfig) as HandleAction[]).map((action) => {
+          {(Object.keys(actionConfig) as ActionKey[]).map((action) => {
             const config = actionConfig[action];
             const Icon = config.icon;
             const isSelected = selectedAction === action;
@@ -273,6 +274,7 @@ function HandoverItem({ record }: { record: HandoverRecord }) {
     contact_customer: { color: "text-amber-400", bgColor: "bg-amber-500" },
     send_review: { color: "text-purple-400", bgColor: "bg-purple-500" },
     mark_resolved: { color: "text-emerald-400", bgColor: "bg-emerald-500" },
+    takeover: { color: "text-cyan-400", bgColor: "bg-cyan-500" },
   };
 
   const config = actionConfigMap[record.action];

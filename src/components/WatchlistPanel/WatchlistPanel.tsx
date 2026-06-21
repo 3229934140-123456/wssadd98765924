@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Star, Thermometer, DoorOpen, MapPin, Clock, AlertTriangle, X, Eye } from "lucide-react";
 import { useVehicleStore } from "@/store/vehicleStore";
@@ -9,8 +9,16 @@ import { PHASE_LABELS } from "@/types";
 import type { Vehicle, TransportPhase } from "@/types";
 
 type SortReason = "anomaly" | "door_open" | "no_report" | "normal";
+type FilterKey = "all" | "anomaly" | "door_open" | "no_report";
 
 const SORT_REASON_LABELS: Record<Exclude<SortReason, "normal">, string> = {
+  anomaly: "温度异常",
+  door_open: "门磁开启",
+  no_report: "超时未上报",
+};
+
+const FILTER_LABELS: Record<FilterKey, string> = {
+  all: "全部",
   anomaly: "温度异常",
   door_open: "门磁开启",
   no_report: "超时未上报",
@@ -136,6 +144,7 @@ export function WatchlistPanel() {
   const watchlistIds = useVehicleStore((s) => s.watchlistIds);
   const getWatchlistVehicles = useVehicleStore((s) => s.getWatchlistVehicles);
   const anomalies = useAnomalyStore((s) => s.anomalies);
+  const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
 
   const watchlistVehicles = useMemo(() => {
     return getWatchlistVehicles();
@@ -144,6 +153,27 @@ export function WatchlistPanel() {
   const activeAnomalies = useMemo(() => {
     return anomalies.filter((a) => a.status !== "resolved");
   }, [anomalies]);
+
+  const filterCounts = useMemo(() => {
+    const counts: Record<Exclude<FilterKey, "all">, number> = {
+      anomaly: 0,
+      door_open: 0,
+      no_report: 0,
+    };
+    watchlistVehicles.forEach(({ sortReason }) => {
+      if (sortReason !== "normal") {
+        counts[sortReason]++;
+      }
+    });
+    return counts;
+  }, [watchlistVehicles]);
+
+  const filteredVehicles = useMemo(() => {
+    if (activeFilter === "all") {
+      return watchlistVehicles;
+    }
+    return watchlistVehicles.filter(({ sortReason }) => sortReason === activeFilter);
+  }, [watchlistVehicles, activeFilter]);
 
   const getVehicleAnomaly = (vehicleId: string) => {
     return activeAnomalies.find((a) => a.vehicleId === vehicleId);
@@ -161,6 +191,18 @@ export function WatchlistPanel() {
     );
   }
 
+  const filterButtons: FilterKey[] = ["all", "anomaly", "door_open", "no_report"];
+
+  const getFilterCount = (key: FilterKey): number => {
+    if (key === "all") return watchlistVehicles.length;
+    return filterCounts[key];
+  };
+
+  const getFilterEmptyMessage = (): string => {
+    const label = FILTER_LABELS[activeFilter];
+    return `暂无${label}的关注车辆`;
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -176,17 +218,47 @@ export function WatchlistPanel() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {watchlistVehicles.map(({ vehicle, sortReason }) => (
-          <WatchlistVehicleCard
-            key={vehicle.id}
-            vehicle={vehicle}
-            sortReason={sortReason}
-            hasActiveAnomaly={activeAnomalies.some((a) => a.vehicleId === vehicle.id)}
-            latestAnomaly={getVehicleAnomaly(vehicle.id)}
-          />
-        ))}
+      <div className="flex items-center gap-2 flex-wrap">
+        {filterButtons.map((key) => {
+          const count = getFilterCount(key);
+          const isActive = activeFilter === key;
+          return (
+            <button
+              key={key}
+              onClick={() => setActiveFilter(key)}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                isActive
+                  ? "bg-slate-200 text-slate-900 shadow-sm"
+                  : "bg-slate-800/40 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50 hover:text-slate-300"
+              }`}
+            >
+              {FILTER_LABELS[key]} ({count})
+            </button>
+          );
+        })}
       </div>
+
+      {filteredVehicles.length === 0 ? (
+        <div className="bg-slate-800/20 border border-dashed border-slate-700/50 rounded-xl p-8 text-center">
+          <Eye size={32} className="mx-auto text-slate-600 mb-2" />
+          <div className="text-slate-400 text-sm">{getFilterEmptyMessage()}</div>
+          <div className="text-slate-500 text-xs mt-1">
+            切换其他筛选条件查看更多车辆
+          </div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {filteredVehicles.map(({ vehicle, sortReason }) => (
+            <WatchlistVehicleCard
+              key={vehicle.id}
+              vehicle={vehicle}
+              sortReason={sortReason}
+              hasActiveAnomaly={activeAnomalies.some((a) => a.vehicleId === vehicle.id)}
+              latestAnomaly={getVehicleAnomaly(vehicle.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }

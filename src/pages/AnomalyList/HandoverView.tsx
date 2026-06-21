@@ -19,39 +19,38 @@ import {
 import { useAnomalyStore } from "@/store/anomalyStore";
 import { useUserStore } from "@/store/userStore";
 import { AnomalyStatusBadge } from "@/components/StatusBadge/StatusBadge";
-import { HANDLE_ACTION_LABELS, ANOMALY_STATUS_LABELS, PHASE_LABELS } from "@/types";
-import type { HandleAction, AnomalyStatus, TakeoverItem } from "@/types";
+import { HANDLE_ACTION_LABELS, ANOMALY_STATUS_LABELS, PHASE_LABELS, SHIFT_LABELS } from "@/types";
+import type { HandleAction, AnomalyStatus, TakeoverItem, ShiftType } from "@/types";
 import { formatDuration, formatDateTime } from "@/utils";
 
-const actionConfig: Record<
-  HandleAction,
-  { label: string; nextStatus: AnomalyStatus; color: string; icon: typeof Phone }
-> = {
+const actionConfig = {
   notify_driver: {
     label: "通知司机",
-    nextStatus: "processing",
+    nextStatus: "processing" as AnomalyStatus,
     color: "bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-500/20",
     icon: Phone,
   },
   contact_customer: {
     label: "联系客户",
-    nextStatus: "processing",
+    nextStatus: "processing" as AnomalyStatus,
     color: "bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20",
     icon: MessageSquare,
   },
   send_review: {
     label: "转入复核",
-    nextStatus: "reviewing",
+    nextStatus: "reviewing" as AnomalyStatus,
     color: "bg-purple-500/10 text-purple-400 border-purple-500/30 hover:bg-purple-500/20",
     icon: AlertTriangle,
   },
   mark_resolved: {
     label: "闭环归档",
-    nextStatus: "resolved",
+    nextStatus: "resolved" as AnomalyStatus,
     color: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20",
     icon: CheckCircle,
   },
 };
+
+type ActionKey = keyof typeof actionConfig;
 
 const riskConfig = {
   critical: {
@@ -80,25 +79,39 @@ export default function HandoverView() {
   const updateAnomalyStatus = useAnomalyStore((s) => s.updateAnomalyStatus);
   const addShiftNote = useAnomalyStore((s) => s.addShiftNote);
   const confirmTakeover = useAnomalyStore((s) => s.confirmTakeover);
+  const [shiftFilter, setShiftFilter] = useState<ShiftType>("all");
 
   const items = useMemo(() => {
     return getTakeoverWorkstation();
   }, [anomalies, handoverRecords, shiftNotes, getTakeoverWorkstation]);
 
+  const filteredItems = useMemo(() => {
+    if (shiftFilter === "all") return items;
+    const shiftName = SHIFT_LABELS[shiftFilter];
+    return items.filter((item) => item.shiftNote?.shift === shiftName);
+  }, [items, shiftFilter]);
+
   const summaryCounts = useMemo(() => {
-    const pending = items.filter((i) => i.anomaly.status === "pending").length;
-    const processing = items.filter((i) => i.anomaly.status === "processing").length;
-    const reviewing = items.filter((i) => i.anomaly.status === "reviewing").length;
-    const critical = items.filter((i) => i.timeoutRisk.level === "critical").length;
-    const warning = items.filter((i) => i.timeoutRisk.level === "warning").length;
-    return { pending, processing, reviewing, critical, warning };
-  }, [items]);
+    const pending = filteredItems.filter((i) => i.anomaly.status === "pending").length;
+    const processing = filteredItems.filter((i) => i.anomaly.status === "processing").length;
+    const reviewing = filteredItems.filter((i) => i.anomaly.status === "reviewing").length;
+    const critical = filteredItems.filter((i) => i.timeoutRisk.level === "critical").length;
+    const warning = filteredItems.filter((i) => i.timeoutRisk.level === "warning").length;
+    const takeoverPending = filteredItems.filter(
+      (i) => i.shiftNote && !i.shiftNote.confirmedBy
+    ).length;
+    return { pending, processing, reviewing, critical, warning, takeoverPending };
+  }, [filteredItems]);
 
   return (
     <div className="animate-fade-in">
-      <HeaderSection counts={summaryCounts} />
+      <HeaderSection
+        counts={summaryCounts}
+        shiftFilter={shiftFilter}
+        onShiftFilterChange={setShiftFilter}
+      />
       <div className="space-y-4">
-        {items.map((item) => (
+        {filteredItems.map((item) => (
           <TakeoverCard
             key={item.anomaly.id}
             item={item}
@@ -111,7 +124,7 @@ export default function HandoverView() {
             onNavigate={navigate}
           />
         ))}
-        {items.length === 0 && (
+        {filteredItems.length === 0 && (
           <div className="text-center py-16 bg-slate-900/60 border border-slate-800 rounded-xl">
             <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-8 h-8 text-emerald-400" />
@@ -127,12 +140,30 @@ export default function HandoverView() {
 
 function HeaderSection({
   counts,
+  shiftFilter,
+  onShiftFilterChange,
 }: {
-  counts: { pending: number; processing: number; reviewing: number; critical: number; warning: number };
+  counts: {
+    pending: number;
+    processing: number;
+    reviewing: number;
+    critical: number;
+    warning: number;
+    takeoverPending: number;
+  };
+  shiftFilter: ShiftType;
+  onShiftFilterChange: (shift: ShiftType) => void;
 }) {
+  const tabItems: Array<{ key: ShiftType; label: string }> = [
+    { key: "all", label: "全部" },
+    { key: "morning", label: SHIFT_LABELS.morning },
+    { key: "middle", label: SHIFT_LABELS.middle },
+    { key: "night", label: SHIFT_LABELS.night },
+  ];
+
   return (
     <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 mb-5">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-amber-500/10 rounded-lg">
             <ArrowRight className="w-5 h-5 text-amber-400" />
@@ -157,6 +188,11 @@ function HeaderSection({
           </div>
           <div className="w-px h-4 bg-slate-700" />
           <div className="flex items-center gap-2">
+            <ClipboardList className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="text-slate-400">待接手 {counts.takeoverPending}</span>
+          </div>
+          <div className="w-px h-4 bg-slate-700" />
+          <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-red-600 animate-pulse" />
             <span className="text-slate-400">严重超时 {counts.critical}</span>
           </div>
@@ -165,6 +201,24 @@ function HeaderSection({
             <span className="text-slate-400">需关注 {counts.warning}</span>
           </div>
         </div>
+      </div>
+      <div className="flex items-center gap-2">
+        {tabItems.map((tab) => {
+          const isActive = shiftFilter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => onShiftFilterChange(tab.key)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-full border transition-all ${
+                isActive
+                  ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                  : "bg-slate-800/50 text-slate-400 border-transparent hover:bg-slate-800 hover:text-slate-300"
+              }`}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -190,7 +244,7 @@ function TakeoverCard({
   onNavigate: ReturnType<typeof useNavigate>;
 }) {
   const { anomaly, handlerChain, currentBottleneck, nextStepSuggestion, timeoutRisk, shiftNote } = item;
-  const [activeAction, setActiveAction] = useState<HandleAction | null>(null);
+  const [activeAction, setActiveAction] = useState<ActionKey | null>(null);
   const [remark, setRemark] = useState("");
   const [showNoteInput, setShowNoteInput] = useState(false);
   const [noteText, setNoteText] = useState("");
@@ -406,7 +460,7 @@ function TakeoverCard({
           <span className="text-xs text-slate-500">直接处理</span>
         </div>
         <div className="grid grid-cols-4 gap-2">
-          {(Object.keys(actionConfig) as HandleAction[]).map((action) => {
+          {(Object.keys(actionConfig) as ActionKey[]).map((action) => {
             const config = actionConfig[action];
             const Icon = config.icon;
             const isActive = activeAction === action;
