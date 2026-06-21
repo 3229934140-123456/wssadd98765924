@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Calendar,
   RefreshCw,
+  ClipboardCheck,
 } from "lucide-react";
 import { useAnomalyStore } from "@/store/anomalyStore";
 import { formatDateTime, formatDuration } from "@/utils";
@@ -19,11 +20,12 @@ import {
   HANDLE_ACTION_LABELS,
   PHASE_LABELS,
 } from "@/types";
-import type { DailyReport as DailyReportType } from "@/types";
+import type { DailyReport as DailyReportType, ShiftNote } from "@/types";
 
 export default function DailyReport() {
   const anomalies = useAnomalyStore((s) => s.anomalies);
   const handoverRecords = useAnomalyStore((s) => s.handoverRecords);
+  const shiftNotesState = useAnomalyStore((s) => s.shiftNotes);
   const getDailyReport = useAnomalyStore((s) => s.getDailyReport);
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0]
@@ -31,7 +33,7 @@ export default function DailyReport() {
 
   const report: DailyReportType = useMemo(() => {
     return getDailyReport(selectedDate);
-  }, [anomalies, handoverRecords, selectedDate, getDailyReport]);
+  }, [anomalies, handoverRecords, shiftNotesState, selectedDate, getDailyReport]);
 
   const [copied, setCopied] = useState(false);
 
@@ -154,7 +156,7 @@ export default function DailyReport() {
           <div className="divide-y divide-slate-800/50 max-h-96 overflow-auto">
             {report.anomalySummary
               .filter((s) => s.anomaly.status !== "resolved")
-              .map(({ anomaly, latestRecord, handlers }) => (
+              .map(({ anomaly, latestRecord, handlers, shiftNote }) => (
                 <div key={anomaly.id} className="p-4 hover:bg-slate-800/30 transition-colors">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex items-center gap-2">
@@ -197,6 +199,24 @@ export default function DailyReport() {
                       </div>
                     )}
                   </div>
+                  {shiftNote && (
+                    <div className="mt-2 pt-2 border-t border-slate-800/50">
+                      <div className="flex items-start gap-2 text-xs">
+                        <ClipboardCheck size={12} className="text-cyan-400 mt-0.5 shrink-0" />
+                        <div className="flex-1">
+                          <span className="text-slate-300">{shiftNote.note}</span>
+                          <span className="text-slate-500 ml-2">— {shiftNote.author}（{shiftNote.shift}）</span>
+                          {shiftNote.confirmedBy ? (
+                            <span className="text-emerald-400 ml-2">
+                              已由 {shiftNote.confirmedAt} {shiftNote.confirmedBy} 确认接手
+                            </span>
+                          ) : (
+                            <span className="text-amber-400 ml-2">待确认</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             {report.anomalySummary.filter((s) => s.anomaly.status !== "resolved")
@@ -257,6 +277,56 @@ export default function DailyReport() {
       </div>
 
       <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-800 flex items-center gap-2">
+          <ClipboardCheck size={16} className="text-cyan-400" />
+          <span className="font-semibold">交班备注与接班确认</span>
+          <span className="text-xs text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded-full">
+            {report.shiftNotes.length} 条
+          </span>
+        </div>
+        <div className="divide-y divide-slate-800/50 max-h-80 overflow-auto">
+          {report.shiftNotes.map((note) => (
+            <div key={note.id} className="p-4 hover:bg-slate-800/30 transition-colors">
+              <div className="flex items-start justify-between mb-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-semibold text-sm">{note.plateNumber}</span>
+                  <span className="text-xs text-slate-500 bg-slate-800/50 px-2 py-0.5 rounded">
+                    {note.shift}
+                  </span>
+                </div>
+                <span className="text-xs text-slate-500 font-mono">
+                  {note.createdAt.slice(11, 16)}
+                </span>
+              </div>
+              <div className="text-sm text-slate-300 mb-2">{note.note}</div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-500 flex items-center gap-1">
+                  <User size={12} />
+                  {note.author}（{note.shift}）
+                </span>
+                {note.confirmedBy ? (
+                  <span className="text-emerald-400 flex items-center gap-1">
+                    <CheckCircle2 size={12} />
+                    已由 {note.confirmedAt} {note.confirmedBy} 确认接手
+                  </span>
+                ) : (
+                  <span className="text-amber-400 flex items-center gap-1">
+                    <Clock size={12} />
+                    待确认
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+          {report.shiftNotes.length === 0 && (
+            <div className="p-8 text-center text-slate-500 text-sm">
+              暂无交班备注
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-slate-900/60 border border-slate-800 rounded-xl overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <FileText size={16} className="text-emerald-400" />
@@ -302,7 +372,7 @@ function generateReportText(report: DailyReportType): string {
   if (unresolved.length === 0) {
     lines.push("  所有异常已闭环 ✓");
   } else {
-    unresolved.forEach(({ anomaly, latestRecord, handlers }, idx) => {
+    unresolved.forEach(({ anomaly, latestRecord, handlers, shiftNote }, idx) => {
       lines.push(`  ${idx + 1}. ${anomaly.plateNumber}`);
       lines.push(`     状态：${ANOMALY_STATUS_LABELS[anomaly.status]}`);
       lines.push(
@@ -325,6 +395,15 @@ function generateReportText(report: DailyReportType): string {
       if (latestRecord?.remark) {
         lines.push(`     备注：${latestRecord.remark}`);
       }
+      if (shiftNote) {
+        lines.push(`     交班备注：${shiftNote.note}`);
+        lines.push(`     备注人：${shiftNote.author}（${shiftNote.shift}）`);
+        if (shiftNote.confirmedBy) {
+          lines.push(`     接班确认：已由 ${shiftNote.confirmedAt} ${shiftNote.confirmedBy} 确认接手`);
+        } else {
+          lines.push(`     接班确认：待确认`);
+        }
+      }
       lines.push("");
     });
   }
@@ -344,6 +423,26 @@ function generateReportText(report: DailyReportType): string {
       lines.push(`     动作：${HANDLE_ACTION_LABELS[record.action]}`);
       lines.push(`     处理人：${record.handler}`);
       lines.push(`     备注：${record.remark}`);
+      lines.push("");
+    });
+  }
+
+  lines.push("──────────────────────────────────────────────");
+  lines.push("四、交班备注与接班确认");
+  lines.push("──────────────────────────────────────────────");
+
+  if (report.shiftNotes.length === 0) {
+    lines.push("  暂无交班备注");
+  } else {
+    report.shiftNotes.forEach((note, idx) => {
+      lines.push(`  ${idx + 1}. [${note.plateNumber}] ${note.note}`);
+      lines.push(`     备注人：${note.author}（${note.shift}）`);
+      lines.push(`     时间：${note.createdAt}`);
+      if (note.confirmedBy) {
+        lines.push(`     接班确认：已由 ${note.confirmedAt} ${note.confirmedBy} 确认接手`);
+      } else {
+        lines.push(`     接班确认：待确认`);
+      }
       lines.push("");
     });
   }

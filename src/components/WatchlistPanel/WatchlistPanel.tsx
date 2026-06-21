@@ -6,15 +6,37 @@ import { useAnomalyStore } from "@/store/anomalyStore";
 import { TempStatusBadge, DoorStatusBadge } from "@/components/StatusBadge/StatusBadge";
 import { formatDateTime, relativeTime } from "@/utils";
 import { PHASE_LABELS } from "@/types";
-import type { Vehicle } from "@/types";
+import type { Vehicle, TransportPhase } from "@/types";
+
+type SortReason = "anomaly" | "door_open" | "no_report" | "normal";
+
+const SORT_REASON_LABELS: Record<Exclude<SortReason, "normal">, string> = {
+  anomaly: "温度异常",
+  door_open: "门磁开启",
+  no_report: "超时未上报",
+};
+
+const SORT_REASON_STYLES: Record<Exclude<SortReason, "normal">, string> = {
+  anomaly: "bg-red-500/15 text-red-400 border border-red-500/30",
+  door_open: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+  no_report: "bg-orange-500/15 text-orange-400 border border-orange-500/30",
+};
+
+const PHASE_PILL_STYLES: Record<TransportPhase, string> = {
+  loading: "bg-blue-500/15 text-blue-400 border border-blue-500/30",
+  waiting: "bg-purple-500/15 text-purple-400 border border-purple-500/30",
+  transporting: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30",
+  unloading: "bg-amber-500/15 text-amber-400 border border-amber-500/30",
+};
 
 interface WatchlistVehicleCardProps {
   vehicle: Vehicle;
+  sortReason: SortReason;
   hasActiveAnomaly: boolean;
   latestAnomaly?: any;
 }
 
-function WatchlistVehicleCard({ vehicle, hasActiveAnomaly, latestAnomaly }: WatchlistVehicleCardProps) {
+function WatchlistVehicleCard({ vehicle, sortReason, hasActiveAnomaly, latestAnomaly }: WatchlistVehicleCardProps) {
   const navigate = useNavigate();
   const toggleWatchlist = useVehicleStore((s) => s.toggleWatchlist);
 
@@ -32,7 +54,7 @@ function WatchlistVehicleCard({ vehicle, hasActiveAnomaly, latestAnomaly }: Watc
           ? "bg-amber-500/5 border-amber-500/30 hover:bg-amber-500/10"
           : "bg-slate-800/30 border-slate-700/50 hover:bg-slate-800/50"
       }`}
-      onClick={() => navigate(`/vehicle/${vehicle.id}`)}
+      onClick={() => navigate(`/vehicles/${vehicle.id}`)}
     >
       <button
         onClick={handleRemove}
@@ -52,6 +74,17 @@ function WatchlistVehicleCard({ vehicle, hasActiveAnomaly, latestAnomaly }: Watc
             {vehicle.carrier} · {vehicle.cargoType}
           </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2 mb-3">
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${PHASE_PILL_STYLES[vehicle.currentPhase]}`}>
+          {PHASE_LABELS[vehicle.currentPhase]}
+        </span>
+        {sortReason !== "normal" && (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${SORT_REASON_STYLES[sortReason]}`}>
+            {SORT_REASON_LABELS[sortReason]}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3 mb-3">
@@ -103,13 +136,14 @@ export function WatchlistPanel() {
   const watchlistIds = useVehicleStore((s) => s.watchlistIds);
   const getWatchlistVehicles = useVehicleStore((s) => s.getWatchlistVehicles);
   const anomalies = useAnomalyStore((s) => s.anomalies);
-  const toggleWatchlist = useVehicleStore((s) => s.toggleWatchlist);
 
   const watchlistVehicles = useMemo(() => {
     return getWatchlistVehicles();
   }, [vehicles, watchlistIds, getWatchlistVehicles]);
 
-  const activeAnomalies = anomalies.filter((a) => a.status !== "resolved");
+  const activeAnomalies = useMemo(() => {
+    return anomalies.filter((a) => a.status !== "resolved");
+  }, [anomalies]);
 
   const getVehicleAnomaly = (vehicleId: string) => {
     return activeAnomalies.find((a) => a.vehicleId === vehicleId);
@@ -143,10 +177,11 @@ export function WatchlistPanel() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {watchlistVehicles.map((vehicle) => (
+        {watchlistVehicles.map(({ vehicle, sortReason }) => (
           <WatchlistVehicleCard
             key={vehicle.id}
             vehicle={vehicle}
+            sortReason={sortReason}
             hasActiveAnomaly={activeAnomalies.some((a) => a.vehicleId === vehicle.id)}
             latestAnomaly={getVehicleAnomaly(vehicle.id)}
           />

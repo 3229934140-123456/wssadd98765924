@@ -24,6 +24,8 @@ function saveWatchlist(ids: string[]): void {
   }
 }
 
+type WatchlistSortReason = "anomaly" | "door_open" | "no_report" | "normal";
+
 interface VehicleStore {
   vehicles: Vehicle[];
   selectedVehicleId: string | null;
@@ -37,9 +39,32 @@ interface VehicleStore {
   getStats: () => { total: number; normal: number; warning: number; alert: number };
   toggleWatchlist: (vehicleId: string) => void;
   isWatched: (vehicleId: string) => boolean;
-  getWatchlistVehicles: () => Vehicle[];
+  getWatchlistVehicles: () => Array<{ vehicle: Vehicle; sortReason: WatchlistSortReason }>;
   initWatchlist: () => void;
 }
+
+function getSortReason(vehicle: Vehicle): WatchlistSortReason {
+  if (vehicle.tempStatus === "alert" || vehicle.tempStatus === "warning") {
+    return "anomaly";
+  }
+  if (vehicle.doorStatus === "open") {
+    return "door_open";
+  }
+  const now = new Date().getTime();
+  const lastReport = new Date(vehicle.lastReportTime).getTime();
+  const minutesSinceReport = Math.floor((now - lastReport) / 60000);
+  if (minutesSinceReport > 30) {
+    return "no_report";
+  }
+  return "normal";
+}
+
+const REASON_PRIORITY: Record<WatchlistSortReason, number> = {
+  anomaly: 0,
+  door_open: 1,
+  no_report: 2,
+  normal: 3,
+};
 
 export const useVehicleStore = create<VehicleStore>((set, get) => ({
   vehicles: mockVehicles,
@@ -113,12 +138,17 @@ export const useVehicleStore = create<VehicleStore>((set, get) => ({
   getWatchlistVehicles: () => {
     const { watchlistIds, vehicles } = get();
     const watched = vehicles.filter((v) => watchlistIds.includes(v.id));
-    const statusPriority = { alert: 0, warning: 1, normal: 2 };
-    return watched.sort((a, b) => {
-      const priorityDiff = statusPriority[a.tempStatus] - statusPriority[b.tempStatus];
-      if (priorityDiff !== 0) return priorityDiff;
-      return new Date(b.lastReportTime).getTime() - new Date(a.lastReportTime).getTime();
-    });
+    return watched
+      .map((vehicle) => ({
+        vehicle,
+        sortReason: getSortReason(vehicle),
+      }))
+      .sort((a, b) => {
+        const priorityDiff = REASON_PRIORITY[a.sortReason] - REASON_PRIORITY[b.sortReason];
+        if (priorityDiff !== 0) return priorityDiff;
+        const statusPriority = { alert: 0, warning: 1, normal: 2 };
+        return statusPriority[a.vehicle.tempStatus] - statusPriority[b.vehicle.tempStatus];
+      });
   },
 
   initWatchlist: () => {

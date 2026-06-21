@@ -17,6 +17,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:28:15",
     status: "in_transit",
     compartment: "前厢",
+    currentPhase: "transporting",
   },
   {
     id: "v002",
@@ -34,6 +35,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:27:42",
     status: "in_transit",
     compartment: "全厢",
+    currentPhase: "transporting",
   },
   {
     id: "v003",
@@ -51,6 +53,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:25:08",
     status: "parked",
     compartment: "后厢",
+    currentPhase: "transporting",
   },
   {
     id: "v004",
@@ -68,6 +71,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:29:30",
     status: "in_transit",
     compartment: "全厢",
+    currentPhase: "transporting",
   },
   {
     id: "v005",
@@ -85,6 +89,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:26:55",
     status: "in_transit",
     compartment: "中厢",
+    currentPhase: "transporting",
   },
   {
     id: "v006",
@@ -102,6 +107,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:28:50",
     status: "in_transit",
     compartment: "前厢",
+    currentPhase: "loading",
   },
   {
     id: "v007",
@@ -119,6 +125,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:24:20",
     status: "parked",
     compartment: "全厢",
+    currentPhase: "waiting",
   },
   {
     id: "v008",
@@ -136,6 +143,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:27:10",
     status: "in_transit",
     compartment: "后厢",
+    currentPhase: "transporting",
   },
   {
     id: "v009",
@@ -153,6 +161,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:25:45",
     status: "in_transit",
     compartment: "全厢",
+    currentPhase: "unloading",
   },
   {
     id: "v010",
@@ -170,6 +179,7 @@ export const mockVehicles: Vehicle[] = [
     lastReportTime: "2026-06-21 09:29:02",
     status: "in_transit",
     compartment: "前厢",
+    currentPhase: "transporting",
   },
 ];
 

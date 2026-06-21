@@ -26,6 +26,7 @@ export interface Vehicle {
   lastReportTime: string;
   status: VehicleStatus;
   compartment: string;
+  currentPhase: TransportPhase;
 }
 
 export interface TrackPoint {
@@ -109,7 +110,31 @@ export interface DailyReport {
     anomaly: Anomaly;
     latestRecord: HandoverRecord | null;
     handlers: string[];
+    shiftNote: ShiftNote | null;
   }>;
+  shiftNotes: ShiftNote[];
+}
+
+export interface ShiftNote {
+  id: string;
+  anomalyId: string;
+  vehicleId: string;
+  plateNumber: string;
+  note: string;
+  author: string;
+  shift: string;
+  createdAt: string;
+  confirmedBy: string | null;
+  confirmedAt: string | null;
+}
+
+export interface TakeoverItem {
+  anomaly: Anomaly;
+  handlerChain: Array<{ handler: string; action: HandleAction; time: string }>;
+  currentBottleneck: string;
+  nextStepSuggestion: string;
+  timeoutRisk: { level: "normal" | "warning" | "critical"; description: string };
+  shiftNote: ShiftNote | null;
 }
 
 export interface ClosureStep {
